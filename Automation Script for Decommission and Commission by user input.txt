@@ -1,0 +1,22 @@
+#Script to shut douwn all nodes  (make this in manager node)
+
+
+
+[hduser@manager hadoop]$ nano hd-down.sh
+
+Add this to the file:-
+
+stop-all.sh
+echo ####
+echo "#### Hadoop Daemons Stopped"
+ssh -t hduser@dn3 "sudo init 0"
+ssh -t hduser@dn2 "sudo init 0"
+ssh -t hduser@dn1 "sudo init 0"
+echo "#### Shuting down namenode server ####"
+sudo init 0
+
+
+
+
+[hduser@manager hadoop]$ chmod +x hd-down.sh
+[hduser@manager hadoop]$ ./hd-down.sh
