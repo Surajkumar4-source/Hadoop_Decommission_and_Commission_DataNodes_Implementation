@@ -1,22 +1,233 @@
-#Script to shut douwn all nodes  (make this in manager node)
-
-
-
-[hduser@manager hadoop]$ nano hd-down.sh
-
-Add this to the file:-
-
-stop-all.sh
-echo ####
-echo "#### Hadoop Daemons Stopped"
-ssh -t hduser@dn3 "sudo init 0"
-ssh -t hduser@dn2 "sudo init 0"
-ssh -t hduser@dn1 "sudo init 0"
-echo "#### Shuting down namenode server ####"
-sudo init 0
+Automation Script: Decommission or Commission a Hadoop DataNode     (This is in Python script)
 
 
 
 
-[hduser@manager hadoop]$ chmod +x hd-down.sh
-[hduser@manager hadoop]$ ./hd-down.sh
+
+import os
+
+def modify_exclude_file(node_name, add=True):
+    """Modify the dfs.exclude file to add or remove a node."""
+    exclude_file = "/etc/hadoop/dfs.hosts.exclude"
+    with open(exclude_file, 'r+') as file:
+        lines = file.readlines()
+        file.seek(0)
+        if add and node_name not in lines:
+            file.write(node_name + "\n")
+        elif not add:
+            lines = [line for line in lines if line.strip() != node_name]
+            file.writelines(lines)
+        file.truncate()
+
+def refresh_namenode():
+    """Refresh the NameNode to apply decommission/commission changes."""
+    os.system("hdfs dfsadmin -refreshNodes")
+
+def decommission_node():
+    node_name = input("Enter the name or IP of the DataNode to decommission: ")
+    modify_exclude_file(node_name, add=True)
+    refresh_namenode()
+    print(f"Decommissioning initiated for node: {node_name}")
+
+def stop_datanode_service(node_name):
+    """Stop the DataNode service on the specified node."""
+    os.system(f"ssh {node_name} 'hadoop-daemon.sh stop datanode'")
+
+def start_datanode_service(node_name):
+    """Start the DataNode service on the specified node."""
+    os.system(f"ssh {node_name} 'hadoop-daemon.sh start datanode'")
+
+def commission_node():
+    node_name = input("Enter the name or IP of the DataNode to commission: ")
+    if node_in_exclude_file(node_name):
+        modify_exclude_file(node_name, add=False)
+        refresh_namenode()
+        start_datanode_service(node_name)
+        print(f"Node {node_name} commissioned successfully.")
+    else:
+        print(f"Node {node_name} is already commissioned.")
+
+def node_in_exclude_file(node_name):
+    """Check if a node is in the dfs.exclude file."""
+    exclude_file = "/etc/hadoop/dfs.hosts.exclude"
+    with open(exclude_file, 'r') as file:
+        return node_name in file.read().splitlines()
+
+def main():
+    choice = input("Choose an action: Decommission or Commission (d/c): ").strip().lower()
+    if choice == 'd':
+        decommission_node()
+    elif choice == 'c':
+        commission_node()
+    else:
+        print("Invalid choice. Please select either 'd' for Decommission or 'c' for Commission.")
+
+if __name__ == "__main__":
+    main()
+
+
+
+**********************************************************************************************************************************************
+
+
+
+Explanation of the Script:-
+
+1. modify_exclude_file: Adds or removes a node from the dfs.exclude file, depending on whether you’re decommissioning (add) or commissioning (remove).
+2. refresh_namenode: Refreshes the NameNode to apply configuration changes after updating the dfs.exclude file.
+3. decommission_node: Prompts for a node name, adds it to dfs.exclude, refreshes the NameNode, and initiates decommissioning.
+4. stop_datanode_service: Stops the DataNode service on the specified node.
+5. start_datanode_service: Starts the DataNode service on the specified node.
+6. commission_node: Checks if the node is in dfs.exclude, removes it if present, refreshes the NameNode, and starts the DataNode service.
+7. main: Provides a user interface to choose decommission or commission.
+
+Usage
+1. Run the script, which prompts you to select Decommission or Commission.
+2. Follow prompts to enter the DataNode name.
+3. The script automates each step in decommissioning or commissioning based on your choice.
+
+
+*****************************************************************************************************************************************************
+
+
+
+
+
+
+
+
+
+
+
+
+For Linux, the steps and commands will be similar but with a few Linux-specific adjustments in syntax and setup. The following Bash script allows you to automate decommissioning and commissioning a Hadoop DataNode.
+
+Bash Script for Decommissioning and Commissioning a Hadoop DataNode:-
+
+
+
+
+
+
+
+#!/bin/bash
+
+EXCLUDE_FILE="/etc/hadoop/dfs.hosts.exclude"
+NAMENODE_HOST="namenode-host"  # Replace with your NameNode hostname or IP
+
+function modify_exclude_file() {
+    local node_name=$1
+    local action=$2
+
+    if [[ $action == "add" ]]; then
+        # Add the node to the exclude file if it’s not already present
+        if ! grep -qx "$node_name" "$EXCLUDE_FILE"; then
+            echo "$node_name" >> "$EXCLUDE_FILE"
+            echo "Node $node_name added to exclude file."
+        else
+            echo "Node $node_name is already in the exclude file."
+        fi
+    elif [[ $action == "remove" ]]; then
+        # Remove the node from the exclude file
+        sed -i "/^$node_name$/d" "$EXCLUDE_FILE"
+        echo "Node $node_name removed from exclude file."
+    fi
+}
+
+function refresh_namenode() {
+    ssh "$NAMENODE_HOST" "hdfs dfsadmin -refreshNodes"
+    echo "Refreshed NameNode to apply changes."
+}
+
+function decommission_node() {
+    read -p "Enter the name or IP of the DataNode to decommission: " node_name
+    modify_exclude_file "$node_name" "add"
+    refresh_namenode
+    echo "Decommissioning initiated for node: $node_name"
+}
+
+function stop_datanode_service() {
+    local node_name=$1
+    ssh "$node_name" "hadoop-daemon.sh stop datanode"
+    echo "Stopped DataNode service on $node_name."
+}
+
+function start_datanode_service() {
+    local node_name=$1
+    ssh "$node_name" "hadoop-daemon.sh start datanode"
+    echo "Started DataNode service on $node_name."
+}
+
+function commission_node() {
+    read -p "Enter the name or IP of the DataNode to commission: " node_name
+    if grep -qx "$node_name" "$EXCLUDE_FILE"; then
+        modify_exclude_file "$node_name" "remove"
+        refresh_namenode
+        start_datanode_service "$node_name"
+        echo "Node $node_name commissioned successfully."
+    else
+        echo "Node $node_name is already commissioned."
+    fi
+}
+
+echo "Choose an action: Decommission or Commission (d/c)"
+read -r choice
+
+case $choice in
+    d|D)
+        decommission_node
+        ;;
+    c|C)
+        commission_node
+        ;;
+    *)
+        echo "Invalid choice. Please select 'd' for Decommission or 'c' for Commission."
+        ;;
+esac
+
+
+
+
+
+
+
+
+
+
+*****************************************************************************************************************************************************
+
+
+Explanation of the Script
+1.	modify_exclude_file: Adds or removes the specified node from the dfs.exclude file.
+
+2.	refresh_namenode: Connects to the NameNode host and refreshes it to apply the changes.
+
+3.	decommission_node: Prompts for a node name, adds it to dfs.exclude, and refreshes the NameNode to begin decommissioning.
+
+4.	stop_datanode_service: Stops the DataNode service on the specified node.
+
+5.	start_datanode_service: Starts the DataNode service on the specified node.
+
+6.	commission_node: Checks if the node is in dfs.exclude, removes it if present, refreshes the NameNode, and starts the DataNode service.
+
+7.	User Prompt: The script prompts the user to select either Decommission or Commission and follows the appropriate steps based on the user’s choice.
+
+
+
+Usage Instructions
+
+1.	Save the script as hadoop_node_manager.sh and make it executable:
+chmod +x hadoop_node_manager.sh
+
+2.	Run the script:
+./hadoop_node_manager.sh
+
+3.	Follow the on-screen prompts to enter Decommission or Commission and specify the DataNode name when requested.
+This script allows Linux users to manage the commissioning and decommissioning of Hadoop DataNodes in a streamlined, automated manner.
+
+
+*****************************************************************************************************************************************************
+
+
+
+
